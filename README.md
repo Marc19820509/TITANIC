@@ -1,5 +1,5 @@
 # TITANIC
-Data set on veiem les persones que van sobreviure a l'accident del titanic
+Quines persones van sobreviure a l'accident del titanic ?
 
 
 Aquest script permet carregar les dades del fitxer train.csv, fer processos de neteja i anàlisi de dades per posteriorment representar el resultats obtinguts i obtenir un arbre de decisió que prediu les persones que van poder sobreviure en funció dels seus atributs.
