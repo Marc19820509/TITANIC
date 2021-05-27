@@ -176,7 +176,7 @@ boxplot(totalData$Age, main='Edat', col='green')
 hist(totalData$Age, main='Edat', ylab='Passatgers', col='green')
 ```
 
-# Anàlisi de les dades i Representació dels resultats
+# Anàlisi de les dades
 
 ## Selecció dels grups de dades que es volen analitzar
 
@@ -304,6 +304,7 @@ titanic.data<-data.frame(totalData[,c(1,2,4,5)])
 corr.titanic.data<-cor(titanic.data)
 corrplot(corr.titanic.data,method="circle")
 ```
+
 Veiem com la correlació més gran amb la supervivència està segons el preu pagat. Llavors seria en funció de l'edat i finalment amb la classe, que té la menor correlació.
 
 ```{r echo=TRUE, message=FALSE, warning=FALSE}
@@ -317,6 +318,7 @@ titanic.data<-table(totalData[,c(1,2)])
 barplot(titanic.data, main = "Supervivents del Titanic segons la classe", xlab = "Survived", col = c("red", "green"))
 legend("topleft", c("No sobreviu", "supervivent"), fill = c("red", "green"))
 ```
+
 Al gràfic anterior veiem com la classe té molt a veure en la supervivència de les persones que anaven al titànic.
 
 ```{r echo=TRUE, message=FALSE, warning=FALSE}
@@ -324,6 +326,7 @@ titanic.data<-table(totalData[,c(1,3)])
 barplot(titanic.data, main = "Supervivents del Titanic segons el sexe", xlab = "Survived", col = c("red", "green"))
 legend("topleft", c("No sobreviu", "supervivent"), fill = c("red", "green"))
 ```
+
 El sexe també va ser determinant
 
 ```{r echo=TRUE, message=FALSE, warning=FALSE}
