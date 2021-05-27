@@ -1,0 +1,432 @@
+---
+title: 'Tipologia i cicle de vida de les dades: PRA2'
+author: "Autor: Josep Garcia Gutiérrez i Marc Alemany Selle"
+date: "Maig 2021"
+output:
+  html_document:
+    highlight: default
+    number_sections: yes
+    theme: cosmo
+    toc: yes
+    toc_depth: 2
+    includes:
+      in_header: 05.584-PAC-header.html
+  word_document: default
+  pdf_document:
+    highlight: zenburn
+    toc: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Descripció del dataset
+
+Primer contacte amb el joc de dades, visualitzem la seva estructura.
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+# Carreguem els paquets R que utilitzarem
+library(ggplot2)
+library(dplyr)
+library(corrplot)
+library(caret)
+library(car)
+
+# Carreguem el fitxer de dades
+totalData <- read.csv("train.csv", sep = ",", stringsAsFactors = FALSE)
+filas=dim(totalData)[1] # indiquem quins son els atributs
+
+# Verifiquem l'estructura del joc de dades
+head(totalData)
+names(totalData)
+str(totalData)
+```
+Descripció de les variables contingudes al fitxer:
+
+PassengerId
+    int que indica l'id del passatger.
+    
+Survived
+    int que indica si el passatger ha sobreviscut o no, és el valor a predir.
+    
+Pclass
+    int que indica la classe del passatger.
+    
+Name
+    string que indica el nom del passatger.
+    
+Sex
+    string que indica el sexe del passatger.
+    
+Age
+    int que indica l'edat del passatger.
+    
+SibSp
+    int que indica el nombre de germans i esposes
+    
+Parch
+    int que indica el nombre de pares i fills
+    
+Ticket
+    string que indica el número de ticket del passatger.
+    
+Fare
+    numeric que indica la tarifa del passatger
+    
+Cabin
+    string que indica la cabina on s'ubica el passatger.
+
+Embarked
+    string que indica el port d'embarcament
+
+
+Veiem les estadístiques bàsiques:
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+#Estadístiques bàsiques
+summary(totalData)
+```
+
+# Integració i selecció de les dades d'interès a analitzar
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+# Canvi de format de variables
+totalData$Survived=as.factor(totalData$Survived) # supervivència (0,1)
+totalData$Pclass=as.factor(totalData$Pclass) # classe del passatge (1,2,3)
+totalData$Sex=as.factor(totalData$Sex) # sexe (female,male)
+
+# Les dades a analitzar seran per termes estadístics les numèriques i utilitzarem el sexe i l'edat per separar diferents grups i veure'ls gràficament.
+```
+
+# Neteja de les dades
+
+## Identificació i tractament dels valors buits o zeros:
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+# Estadístiques de valors buits o NA
+colSums(is.na(totalData))
+colSums(totalData=="")
+```
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+# Mirem els valors de l'edat
+totalData$Age
+```
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+head(sort(totalData$Age),20) # hi ha registres decimals erronis
+```
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+# assignem NA als valors estranys:
+totalData$Age=ifelse(totalData$Age!=round(totalData$Age), NA, as.integer(totalData$Age))
+```
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+# Eliminem les files amb valors nuls i tornem a veure les estadístques
+totalData$Embarked[totalData$Embarked==""]="NA" # Substituim els valors buits per NA per eliminar-los després
+totalData <- totalData[!is.na(totalData$Age),]
+totalData <- totalData[!is.na(totalData$Embarked),]
+colSums(is.na(totalData))
+colSums(totalData=="")
+```
+Veiem com ja no tenim valors buits ni NA als atributs que ens interessen.
+L'atribut "Cabin" el deixem amb els valors buits perquè deixaríem el dataset buit i no es tracta d'un atribut analitzable.
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+#Tornem a veure estadístiques:
+totalData=na.omit(totalData) 
+summary(totalData)
+```
+
+## Identificació i tractament dels valors extrems:
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+# Veiem els valors extrems 
+totalData.bp.edat <- boxplot(totalData$Age, main="Edat", col="green")
+totalData.bp.tarifa <- boxplot(totalData$Fare, main="Tarifa", col="green")
+totalData.bp.edat$out
+totalData.bp.tarifa$out
+```
+
+Discretitzem quan té sentit i en funció de les capacitats de cada variable.  
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+# Afegim dos camps nous a les dades. Aquests valors són l'edat i la tarifa discretitzada
+
+# Discretitzem
+totalData["Segment_edat"] <- cut(totalData$Age, breaks = c(0,10,20,30,40,50,60,70,100), labels = c("0-10", "10-20", "20-30", "30-40","40-50","50-60","60-70","70-79"))
+totalData["Segment_tarifa"] <- cut(totalData$Fare, breaks = c(0,7,10,15,30,50,200,600), labels = c("0-7", "7-10", "10-15","15-30","30-50","50-200","200-600"))
+totalData["Segment_majors_menors"] <- cut(totalData$Age, breaks = c(0,18,100), labels = c("Menor d'edat", "Major d'edat"))
+```
+Hem fet les discretitzacions anteriors per comprovar si hi ha alguna relació de supervivència en funció de l'edat, el preu pagat i una més general que seria si són majors o menors d'edat.
+A més a més analitzarem el sexe també.
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+# Observem les dades discretitzades
+head(totalData)
+
+# Primeres visualitzacions
+plot(totalData$Segment_edat, main='Segment Edat', ylab='Passatgers', col='green')
+plot(totalData$Segment_tarifa, main='Segment Tarifa', ylab='Passatgers', col='green')
+plot(totalData$Pclass, main='Classe', ylab='Passatgers', col='green')
+plot(totalData$Survived, main='Supervivents', ylab='Passatgers', col='green')
+plot(totalData$Sex, main='Sexe', ylab='Passatgers', col='green')
+boxplot(totalData$Age, main='Edat', col='green')
+hist(totalData$Age, main='Edat', ylab='Passatgers', col='green')
+```
+
+# Anàlisi de les dades i Representació dels resultats
+
+## Selecció dels grups de dades que es volen analitzar
+
+Seleccionem la meitat dels atributs, els que veiem que poden ser susceptibles d'anàlisi:
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+totalData = totalData [ , c(2,3,5,6,10,12,13,14,15)]
+```
+
+## Comprovació de la normalitat i homogeneïtat de la variància
+
+Comprovem la normalitat de les dades amb el test de Kolmogorov-Smirnow i de Shapiro-Wilk:
+```{r}
+# canviem el tipus de dades a numèric
+totalData$Survived=as.numeric(totalData$Survived)
+totalData$Pclass=as.numeric(totalData$Pclass)
+
+ks.test(totalData$Age, pnorm, mean(totalData$Age), sd(totalData$Age))
+ks.test(totalData$Fare, pnorm, mean(totalData$Fare), sd(totalData$Fare))
+ks.test(totalData$Pclass, pnorm, mean(totalData$Pclass), sd(totalData$Pclass))
+ks.test(totalData$Survived, pnorm, mean(totalData$Survived), sd(totalData$Survived))
+shapiro.test(totalData$Age)
+shapiro.test(totalData$Fare)
+shapiro.test(totalData$Pclass)
+shapiro.test(totalData$Survived)
+```
+On veiem que ambdós tests rebutgen la normalitat de les dades perquè el p-value és inferior a 0.05.
+
+
+Comprovem la homogeneïtat de la variància amb el test de Fligner-Killeen per a dades que no compleixen la condició de normalitat:
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+fligner.test(totalData$Age, totalData$Survived)
+fligner.test(totalData$Fare, totalData$Survived)
+fligner.test(as.numeric(totalData$Pclass), totalData$Survived)
+```
+Es rebutja homocedasticitat per Fare (<0.05), és a dir, presenta variàncies estadísticament diferents per als grups Survived. Mentre que existeixen variàncies homogènies pels grups d'Age i Pclass.
+
+## Aplicació de proves estadístiques per comparar grups de dades
+
+Fem la Regressió linial per aproximar la relació de dependència linial entre Survived i la resta de variables:
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+# Survived amb Age
+m1 = lm(Survived~Age,data=totalData)
+summary(m1)
+```
+Segons el R-squared veiem com la supervivència i l'edat es correlacionen molt poc, amb un 0,002351.
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+# Survived amb Fare
+m2 = lm(Survived~Fare,data=totalData)
+summary(m2)
+```
+Segons el R-squared veiem com la supervivència i el preu pagat es correlacionen bastant més que l'edat, amb un 0,07078.
+
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+# Survived amb Pclass
+m3 = lm(Survived~Pclass,data=totalData)
+summary(m3)
+```
+
+Segons el R-squared veiem com la supervivència i la classe es correlacionen més que el preu pagat fins i tot, amb un 0,1282.
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+# Survived amb Pclass+Fare
+m4 = lm(Survived~Pclass+Fare,data=totalData)
+summary(m4)
+```
+Si sumem la classe i el preu pagat la correlació amb la supervivència segueix augmentant, fins el 0,135.
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+# Survived amb Pclass (manera quadràtica)
+m5 = lm(Survived~Pclass+I(Pclass^2),data=totalData)
+summary(m5)
+```
+El terme que relaciona la supervivència amb la classe de manera quadràtica resulta ser poc més significatiu.
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+# Tornem a deixar com a factors les dades 
+totalData$Survived=as.factor(totalData$Survived-1) # restem 1 per tornar les variables supervivència a (0,1)
+totalData$Pclass=as.factor(totalData$Pclass)
+```
+
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+# prediccions amb la variable supervivència
+
+# regressió logística
+
+rl=glm(formula = Survived~Pclass+Age+Sex,data = totalData, family=binomial(link = logit))
+summary(rl)
+```
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+exp(confint(rl))
+```
+
+Interpretació L'odds ratio ens indica l'augment o disminució de probabilitat de supervivència en funció de les variables predictives. Tots els regressors que apareixen tenen valors inferiors a la unitat, això vol dir que la seva presència disminueix la probabilitat de supervivència. Es llegeix de la següent manera: amb un interval de confiança del 95%, ser de la segona classe fa que la probabilitat de sobreviure augmenti de 0,15 a 0,46 vegades. És a dir, la probabilitat de morir és de 1/0,15 a 1/0,46, o sigui del 2,17% al 6,67%. En el cas de ser de tercera classe la probabilitat de no sobreviure era del 6,94% al 21,27% i si eres home la probabilitat pujava del 8,52% al 19,41%. L'edat, tot i ser estadísticament significativa, no afecta massa a la probabilitat, ser un any més gran disminueix la probabilitat de sobreviure del 1,01% al 1,04%.
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+# fem prediccions del model
+
+prediccio1=predict(rl, newdata =  data.frame(Pclass='3',Age=40,Sex='male'),type ="response")
+prediccio2=predict(rl, newdata =  data.frame(Pclass='1',Age=5,Sex='female'),type ="response")
+print(prediccio1)
+print(prediccio2)
+```
+
+La predicció de supervivència per un home de 40 anys de la tercera classe era del 6%. En canvi, una nena de 5 anys de primera classe tenia una probabilitat de sobreviure del 96%
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+# matriu de confusió del model
+
+confusionMatrix(table(predict(rl,type = "response")>=0.5,totalData$Survived=="1"))
+```
+
+# Representació dels resultats
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+# Mirem la correlació entre variables (tots els camps han de ser numèrics)
+totalData$Survived=as.numeric(totalData$Survived)
+totalData$Pclass=as.numeric(totalData$Pclass)
+titanic.data<-data.frame(totalData[,c(1,2,4,5)])
+
+corr.titanic.data<-cor(titanic.data)
+corrplot(corr.titanic.data,method="circle")
+```
+Veiem com la correlació més gran amb la supervivència està segons el preu pagat. Llavors seria en funció de l'edat i finalment amb la classe, que té la menor correlació.
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+# Tornem a deixar els atributs com a factors
+totalData$Survived=as.factor(totalData$Survived-1) # restem 1 per tornar les variables supervivència a (0,1)
+totalData$Pclass=as.factor(totalData$Pclass)
+```
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+titanic.data<-table(totalData[,c(1,2)])
+barplot(titanic.data, main = "Supervivents del Titanic segons la classe", xlab = "Survived", col = c("red", "green"))
+legend("topleft", c("No sobreviu", "supervivent"), fill = c("red", "green"))
+```
+Al gràfic anterior veiem com la classe té molt a veure en la supervivència de les persones que anaven al titànic.
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+titanic.data<-table(totalData[,c(1,3)])
+barplot(titanic.data, main = "Supervivents del Titanic segons el sexe", xlab = "Survived", col = c("red", "green"))
+legend("topleft", c("No sobreviu", "supervivent"), fill = c("red", "green"))
+```
+El sexe també va ser determinant
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+titanic.data<-table(totalData[,c(1,4)])
+barplot(titanic.data, main = "Supervivents del Titanic segons l'edat", xlab = "Survived", col = c("red", "green"))
+legend("topleft", c("No sobreviu", "supervivent"), fill = c("red", "green"))
+```
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+titanic.data<-table(totalData[,c(1,9)])
+barplot(titanic.data, main = "Supervivents del Titanic segons majors i menors d'edat", xlab = "Survived", col = c("red", "green"))
+legend("topleft", c("No sobreviu", "supervivent"), fill = c("red", "green"))
+```
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+titanic.data<-table(totalData[,c(1,8)])
+barplot(titanic.data, main = "Supervivents del Titanic segons el preu pagat", xlab = "Survived", col = c("red", "green"))
+legend("topright", c("No sobreviu", "supervivent"), fill = c("red", "green"))
+```
+
+## Arbre de decisió
+
+Crearem un arbre de decisió que permeti analitzar quines persones sobreviuran segons l'anàlisi efectuat anteriorment. Per tant, la variable per la qual classificarem és el camp Survived.
+
+```{r}
+# Triem els atributs que volem que intervinguin en l'arbre de decisió:
+totalData = totalData [ , c(1,2,3,4,5,6,7,8,9)]
+
+# Guardem les dades en csv com a arxiu final de les dades a analitzar:
+write.csv(totalData,"totalDataFinal.csv")
+```
+
+Ens interessarà desordenar el dataset per si tingués algun ordre i guardarem les dades amb el nou nom com "data_random".
+```{r}
+set.seed(1)
+data_random <- totalData[sample(nrow(totalData)),]
+```
+
+Per a la futura avaluació de l'arbre de decisió, és necessari dividir el conjunt de dades en un conjunt d'entrenament i un conjunt de prova. El conjunt d'entrenament és el subconjunt del conjunt original de dades utilitzat per a construir un primer model; i el conjunt de prova, el subconjunt del conjunt original de dades utilitzat per a avaluar la qualitat del model.
+
+El més correcte serà utilitzar un conjunt de dades diferent del que utilitzem per a construir l'arbre, és a dir, un conjunt diferent del d'entrenament. No hi ha cap proporció fixada respecte al nombre relatiu de components de cada subconjunt, però la més utilitzada acostuma a ser 2/3 per al conjunt d'entrenament i 1/3, per al conjunt de prova.
+
+La variable per la qual classificarem és el camp Survived, que està a la primera columna.
+
+```{r}
+set.seed(666)
+y <- data_random[,1] 
+X <- data_random[,2:9]
+```
+
+Podem triar el subconjunt d'entrenament i el de prova creant un rang:
+
+```{r}
+set.seed(555)
+indexes = sample(1:nrow(totalData), size=floor((2/3)*nrow(totalData)))
+trainX <- X[indexes,]
+trainy <- y[indexes]
+testX  <- X[-indexes,]
+testy  <- y[-indexes]
+```
+
+Després d'una extracció aleatòria de casos és altament recomanable efectuar una anàlisi de dades mínim per a assegurar-nos de no obtenir classificadors esbiaixats pels valors que conté cada mostra.
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+summary(trainX)
+summary(trainy)
+```
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+summary(testX)
+summary(testy)
+```
+
+Es crea l'arbre de decisió usant les dades d'entrenament (cal no oblidar que la variable outcome és de tipus factor).
+Aquest model ens generarà unes regles que ens determinaran les probabilitats de supervivència:
+
+```{r}
+trainy = as.factor(trainy)
+model <- C50::C5.0(trainX, trainy, rules=TRUE )
+summary(model)
+```
+
+El model ens ha creat 8 regles per poder crear l'arbre de decisió que mostrem a continuació.
+Aquestes regles ens dónen el % de probabilitats que el passatger sobrevisqui o no, segons el valor class sigui classificat en 0 o 1.
+
+```{r}
+model <- C50::C5.0(trainX, trainy)
+plot(model)
+```
+
+Una vegada tenim el model, podem comprovar la seva qualitat predient la classe per a les dades de prova que ens hem reservat al principi.
+
+```{r}
+predicted_model <- predict(model, testX, type="class")
+print(sprintf("La precisió de l'arbre és de: %.4f %%",100*sum(predicted_model == testy) / length(predicted_model)))
+```
+
+Quan hi ha poques classes, la qualitat de la predicció es pot analitzar mitjançant una matriu de confusió que identifica els tipus d'errors comesos.
+
+```{r}
+mat_conf<-table(testy,Predicted=predicted_model)
+mat_conf
+```
+
+
+
