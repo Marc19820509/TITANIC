@@ -10,7 +10,7 @@ El programa està format per 1 arxiu:
 
 ## Com executar el codi
 
-S'ha d'utilitzar RStudio i obrir l'arxiu
+S'ha d'utilitzar RStudio i obrir l'arxiu:
 
 ```
 PRA 2 27-05.Rmd
