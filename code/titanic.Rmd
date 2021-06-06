@@ -31,6 +31,7 @@ library(dplyr)
 library(corrplot)
 library(caret)
 library(car)
+library(ggpubr)
 
 # Carreguem el fitxer de dades
 totalData <- read.csv("train.csv", sep = ",", stringsAsFactors = FALSE)
@@ -114,7 +115,7 @@ totalData$Age
 ```
 
 ```{r echo=TRUE, message=FALSE, warning=FALSE}
-head(sort(totalData$Age),20) # hi ha registres decimals erronis
+head(sort(totalData$Age),10) # hi ha registres decimals erronis
 ```
 
 ```{r echo=TRUE, message=FALSE, warning=FALSE}
@@ -123,10 +124,8 @@ totalData$Age=ifelse(totalData$Age!=round(totalData$Age), NA, as.integer(totalDa
 ```
 
 ```{r echo=TRUE, message=FALSE, warning=FALSE}
-# Eliminem les files amb valors nuls i tornem a veure les estadístques
-totalData$Embarked[totalData$Embarked==""]="NA" # Substituim els valors buits per NA per eliminar-los després
+# Eliminem les files amb valors nuls i tornem a veure les estadístiques
 totalData <- totalData[!is.na(totalData$Age),]
-totalData <- totalData[!is.na(totalData$Embarked),]
 colSums(is.na(totalData))
 colSums(totalData=="")
 ```
@@ -176,20 +175,21 @@ boxplot(totalData$Age, main='Edat', col='green')
 hist(totalData$Age, main='Edat', ylab='Passatgers', col='green')
 ```
 
-# Anàlisi de les dades
+# Anàlisi de les dades i Representació dels resultats
 
 ## Selecció dels grups de dades que es volen analitzar
 
 Seleccionem la meitat dels atributs, els que veiem que poden ser susceptibles d'anàlisi:
 ```{r echo=TRUE, message=FALSE, warning=FALSE}
-totalData = totalData [ , c(2,3,5,6,10,12,13,14,15)]
+totalData = totalData [ , c(2,3,5,6,10,13,14,15)]
 ```
 
 ## Comprovació de la normalitat i homogeneïtat de la variància
 
-Comprovem la normalitat de les dades amb el test de Kolmogorov-Smirnow i de Shapiro-Wilk:
+Comprovem la normalitat de les dades amb el test de Kolmogorov-Smirnov i de Shapiro-Wilk:
 ```{r}
 # canviem el tipus de dades a numèric
+
 totalData$Survived=as.numeric(totalData$Survived)
 totalData$Pclass=as.numeric(totalData$Pclass)
 
@@ -203,8 +203,19 @@ shapiro.test(totalData$Pclass)
 shapiro.test(totalData$Survived)
 ```
 On veiem que ambdós tests rebutgen la normalitat de les dades perquè el p-value és inferior a 0.05.
+```{r}
+# Observem visualment la normalitat i distribució de les variables
 
-
+# Density plot i QQ plot
+ggdensity(totalData$Age, fill = "lightgray")
+ggqqplot(totalData$Age)
+ggdensity(totalData$Fare, fill = "lightgray")
+ggqqplot(totalData$Fare)
+ggdensity(totalData$Pclass, fill = "lightgray")
+ggqqplot(totalData$Pclass)
+ggdensity(totalData$Survived, fill = "lightgray")
+ggqqplot(totalData$Survived)
+```
 Comprovem la homogeneïtat de la variància amb el test de Fligner-Killeen per a dades que no compleixen la condició de normalitat:
 ```{r echo=TRUE, message=FALSE, warning=FALSE}
 fligner.test(totalData$Age, totalData$Survived)
@@ -221,13 +232,20 @@ Fem la Regressió linial per aproximar la relació de dependència linial entre 
 # Survived amb Age
 m1 = lm(Survived~Age,data=totalData)
 summary(m1)
+plot(totalData$Age, totalData$Survived, xlab='Age', ylab='Survived')
+abline(m1)
+
 ```
 Segons el R-squared veiem com la supervivència i l'edat es correlacionen molt poc, amb un 0,002351.
+
 
 ```{r echo=TRUE, message=FALSE, warning=FALSE}
 # Survived amb Fare
 m2 = lm(Survived~Fare,data=totalData)
 summary(m2)
+plot(totalData$Fare, totalData$Survived, xlab='Fare', ylab='Survived')
+abline(m2)
+
 ```
 Segons el R-squared veiem com la supervivència i el preu pagat es correlacionen bastant més que l'edat, amb un 0,07078.
 
@@ -236,16 +254,19 @@ Segons el R-squared veiem com la supervivència i el preu pagat es correlacionen
 # Survived amb Pclass
 m3 = lm(Survived~Pclass,data=totalData)
 summary(m3)
+plot(totalData$Pclass, totalData$Survived, xlab='Pclass', ylab='Survived')
+abline(m3)
+
 ```
 
-Segons el R-squared veiem com la supervivència i la classe es correlacionen més que el preu pagat fins i tot, amb un 0,1282.
+Segons el R-squared veiem com la supervivència i la classe es correlacionen més que el preu pagat fins i tot, amb un 0,1294.
 
 ```{r echo=TRUE, message=FALSE, warning=FALSE}
 # Survived amb Pclass+Fare
 m4 = lm(Survived~Pclass+Fare,data=totalData)
 summary(m4)
 ```
-Si sumem la classe i el preu pagat la correlació amb la supervivència segueix augmentant, fins el 0,135.
+Si sumem la classe i el preu pagat la correlació amb la supervivència segueix augmentant, fins el 0,1362.
 
 ```{r echo=TRUE, message=FALSE, warning=FALSE}
 # Survived amb Pclass (manera quadràtica)
@@ -293,6 +314,32 @@ La predicció de supervivència per un home de 40 anys de la tercera classe era 
 confusionMatrix(table(predict(rl,type = "response")>=0.5,totalData$Survived=="1"))
 ```
 
+```{r}
+# visualització de la regressió logística
+
+predicted.data <- data.frame(probability.of.survival = rl$fitted.value, Survived = as.numeric(totalData$Survived)-1, Pclass = totalData$Pclass)
+predicted.data <- predicted.data[order(predicted.data$probability.of.survival, decreasing = FALSE),]
+ggplot(data=predicted.data,aes(x=probability.of.survival,y=Survived,col=Pclass))+
+  geom_point(alpha=0.8,shape=1,stroke=1)+
+  xlab('Predicted probability of surviving titanic')+
+  ylab('Survived')+
+  stat_smooth(method="glm", method.args=list(family="binomial"), se=FALSE,fullrange = TRUE)+
+  theme(legend.position = 'bottom',plot.title = element_text(hjust = 0.5))+
+  ggtitle('Survival by Pclass')
+```
+```{r}
+predicted.data <- data.frame(probability.of.survival = rl$fitted.value, Survived = as.numeric(totalData$Survived)-1, Sex=totalData$Sex)
+predicted.data <- predicted.data[order(predicted.data$probability.of.survival, decreasing = FALSE),]
+ggplot(data=predicted.data,aes(x=probability.of.survival,y=Survived,col=Sex))+
+  geom_point(alpha=0.8,shape=1,stroke=1)+
+  xlab('Predicted probability of surviving titanic')+
+  ylab('Survived')+
+  stat_smooth(method="glm", method.args=list(family="binomial"), se=FALSE,fullrange = TRUE)+
+  theme(legend.position = 'bottom',plot.title = element_text(hjust = 0.5))+
+  ggtitle('Survival by Gender')
+```
+
+
 # Representació dels resultats
 
 ```{r echo=TRUE, message=FALSE, warning=FALSE}
@@ -336,13 +383,13 @@ legend("topleft", c("No sobreviu", "supervivent"), fill = c("red", "green"))
 ```
 
 ```{r echo=TRUE, message=FALSE, warning=FALSE}
-titanic.data<-table(totalData[,c(1,9)])
+titanic.data<-table(totalData[,c(1,8)])
 barplot(titanic.data, main = "Supervivents del Titanic segons majors i menors d'edat", xlab = "Survived", col = c("red", "green"))
 legend("topleft", c("No sobreviu", "supervivent"), fill = c("red", "green"))
 ```
 
 ```{r echo=TRUE, message=FALSE, warning=FALSE}
-titanic.data<-table(totalData[,c(1,8)])
+titanic.data<-table(totalData[,c(1,7)])
 barplot(titanic.data, main = "Supervivents del Titanic segons el preu pagat", xlab = "Survived", col = c("red", "green"))
 legend("topright", c("No sobreviu", "supervivent"), fill = c("red", "green"))
 ```
@@ -350,14 +397,6 @@ legend("topright", c("No sobreviu", "supervivent"), fill = c("red", "green"))
 ## Arbre de decisió
 
 Crearem un arbre de decisió que permeti analitzar quines persones sobreviuran segons l'anàlisi efectuat anteriorment. Per tant, la variable per la qual classificarem és el camp Survived.
-
-```{r}
-# Triem els atributs que volem que intervinguin en l'arbre de decisió:
-totalData = totalData [ , c(1,2,3,4,5,6,7,8,9)]
-
-# Guardem les dades en csv com a arxiu final de les dades a analitzar:
-write.csv(totalData,"totalDataFinal.csv")
-```
 
 Ens interessarà desordenar el dataset per si tingués algun ordre i guardarem les dades amb el nou nom com "data_random".
 ```{r}
@@ -374,7 +413,7 @@ La variable per la qual classificarem és el camp Survived, que està a la prime
 ```{r}
 set.seed(666)
 y <- data_random[,1] 
-X <- data_random[,2:9]
+X <- data_random[,2:8]
 ```
 
 Podem triar el subconjunt d'entrenament i el de prova creant un rang:
@@ -431,5 +470,8 @@ mat_conf<-table(testy,Predicted=predicted_model)
 mat_conf
 ```
 
-
+```{r}
+# Guardem les dades en csv com a arxiu final:
+write.csv(totalData,"totalDataFinal.csv")
+```
 
